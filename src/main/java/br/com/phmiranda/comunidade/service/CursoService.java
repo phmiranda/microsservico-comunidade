@@ -1,72 +1,66 @@
-/*
- * Author: phmiranda
- * Project: comunidade
- * Task Number: 73
- * Description: Usando Spring Data
- * Date: 28/03/2022
- */
-
 package br.com.phmiranda.comunidade.service;
 
+import br.com.phmiranda.comunidade.config.exception.ResourceNotFoundException;
 import br.com.phmiranda.comunidade.domain.dto.request.CursoRequest;
-import br.com.phmiranda.comunidade.domain.entity.Curso;
 import br.com.phmiranda.comunidade.domain.dto.response.CursoResponse;
+import br.com.phmiranda.comunidade.domain.entity.Curso;
 import br.com.phmiranda.comunidade.repository.CursoRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.UriComponentsBuilder;
-
-import java.net.URI;
-import java.util.Optional;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class CursoService {
 
+    private final CursoRepository cursoRepository;
 
-    @Autowired
-    CursoRepository cursoRepository;
-
-    public Page<CursoResponse> index(Pageable paginacao) {
-        Page<Curso> cursos = cursoRepository.findAll(paginacao);
-        return CursoResponse.converter(cursos);
+    public CursoService(CursoRepository cursoRepository) {
+        this.cursoRepository = cursoRepository;
     }
 
-    public ResponseEntity<CursoResponse> salvar(CursoRequest cursoRequest, UriComponentsBuilder uriComponentsBuilder) {
-        Curso curso = cursoRequest.converter();
+    @Transactional(readOnly = true)
+    public Page<CursoResponse> listar(Pageable paginacao) {
+        return CursoResponse.converter(cursoRepository.findAll(paginacao));
+    }
+
+    @Transactional
+    public CursoResponse salvar(CursoRequest request) {
+        Curso curso = new Curso(request.getNome(), request.getCategoria());
         cursoRepository.save(curso);
-        URI uri = uriComponentsBuilder.path("/cursos/{id}").buildAndExpand(curso.getId()).toUri();
-        return ResponseEntity.created(uri).body(new CursoResponse(curso));
+        return new CursoResponse(curso);
     }
 
-    public ResponseEntity<CursoResponse> atualizar(Long id, CursoRequest cursoRequest) {
-        Curso curso = cursoRequest.atualizarEntidade(id, cursoRepository);
-        return ResponseEntity.ok(new CursoResponse(curso));
+    @Transactional
+    public CursoResponse atualizar(Long id, CursoRequest request) {
+        Curso curso = buscarEntidade(id);
+        curso.setNome(request.getNome());
+        curso.setCategoria(request.getCategoria());
+        return new CursoResponse(curso);
     }
 
-    public ResponseEntity<CursoResponse> pesquisarPorId(Long id) {
-        Optional<Curso> optional = cursoRepository.findById(id);
-        if (optional.isPresent()) {
-            return ResponseEntity.ok(new CursoResponse(optional.get())) ;
-        }
-        return ResponseEntity.notFound().build();
+    @Transactional(readOnly = true)
+    public CursoResponse pesquisarPorId(Long id) {
+        return new CursoResponse(buscarEntidade(id));
     }
 
+    @Transactional(readOnly = true)
     public Page<CursoResponse> pesquisarPorCategoria(Pageable paginacao, String categoria) {
-        Page<Curso> cursos = cursoRepository.findByCategoria(paginacao, categoria);
+        Page<Curso> cursos = categoria == null || categoria.trim().isEmpty()
+            ? cursoRepository.findAll(paginacao)
+            : cursoRepository.findByCategoriaContainingIgnoreCase(paginacao, categoria);
         return CursoResponse.converter(cursos);
     }
 
-    public ResponseEntity<?> deletar(Long id) {
-        Optional<Curso> optional = cursoRepository.findById(id);
-        if (optional.isPresent()) {
-            cursoRepository.deleteById(id);
-            return ResponseEntity.ok().build();
-        }
-        return ResponseEntity.notFound().build();
+    @Transactional
+    public void deletar(Long id) {
+        Curso curso = buscarEntidade(id);
+        cursoRepository.delete(curso);
+    }
+
+    @Transactional(readOnly = true)
+    public Curso buscarEntidade(Long id) {
+        return cursoRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Curso", id));
     }
 }

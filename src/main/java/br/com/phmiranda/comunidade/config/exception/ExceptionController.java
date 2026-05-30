@@ -1,51 +1,101 @@
-/*
- * Author: phmiranda
- * Project: comunidade
- * Task Number: HU-XXX
- * Description: N/A
- * Date: 07/04/2022
- */
-
 package br.com.phmiranda.comunidade.config.exception;
 
-import br.com.phmiranda.comunidade.domain.dto.handler.Exception;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.MessageSource;
-import org.springframework.context.i18n.LocaleContextHolder;
+import br.com.phmiranda.comunidade.domain.dto.handler.ApiErrorResponse;
+import br.com.phmiranda.comunidade.domain.dto.handler.FieldErrorResponse;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.ArrayList;
+import javax.servlet.http.HttpServletRequest;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class ExceptionController {
-    @Autowired
-    // classe responsável por capturar informações de idioma/local.
-    private MessageSource messageSource;
 
-    @ResponseStatus(code = HttpStatus.BAD_REQUEST)
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public List<Exception> handle(MethodArgumentNotValidException exception) {
+    public ResponseEntity<ApiErrorResponse> handleValidation(
+        MethodArgumentNotValidException exception,
+        HttpServletRequest request
+    ) {
+        List<FieldErrorResponse> fields = exception.getBindingResult().getFieldErrors().stream()
+            .map(this::toFieldError)
+            .collect(Collectors.toList());
 
-        // cria um array com os atributos da classe de exceção DTO.
-        List<Exception> exceptions = new ArrayList<>();
+        return build(HttpStatus.BAD_REQUEST, "Requisição inválida.", request.getRequestURI(), fields);
+    }
 
-        // captura quais os campos que estão com problemas e lançará na exceção.
-        List<FieldError> errors = exception.getBindingResult().getFieldErrors();
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handleNotFound(
+        ResourceNotFoundException exception,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.NOT_FOUND, exception.getMessage(), request.getRequestURI(), Collections.emptyList());
+    }
 
-        // percorre a lista de erros para cada campo e a mensagem, além de atribuir um idioma do sistema.
-        errors.forEach(e -> {
-            String mensagem = messageSource.getMessage(e, LocaleContextHolder.getLocale());
-            Exception error = new Exception(e.getField(), "Erro no atributo " + e.getField() + ", o atributo pode com problemas relacionado a " + mensagem);
-            exceptions.add(error);
-        });
+    @ExceptionHandler({BusinessException.class, IllegalArgumentException.class})
+    public ResponseEntity<ApiErrorResponse> handleBusiness(
+        RuntimeException exception,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage(), request.getRequestURI(), Collections.emptyList());
+    }
 
-        // retornar as exceções capturadas no formulário.
-        return exceptions;
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ApiErrorResponse> handleBadCredentials(
+        BadCredentialsException exception,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.UNAUTHORIZED, "E-mail ou senha inválidos.", request.getRequestURI(), Collections.emptyList());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiErrorResponse> handleAccessDenied(
+        AccessDeniedException exception,
+        HttpServletRequest request
+    ) {
+        return build(HttpStatus.FORBIDDEN, "Acesso negado.", request.getRequestURI(), Collections.emptyList());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
+        DataIntegrityViolationException exception,
+        HttpServletRequest request
+    ) {
+        return build(
+            HttpStatus.CONFLICT,
+            "Operação não permitida porque o recurso possui vínculos ou viola uma restrição de dados.",
+            request.getRequestURI(),
+            Collections.emptyList()
+        );
+    }
+
+    private FieldErrorResponse toFieldError(FieldError error) {
+        return new FieldErrorResponse(error.getField(), error.getDefaultMessage());
+    }
+
+    private ResponseEntity<ApiErrorResponse> build(
+        HttpStatus status,
+        String message,
+        String path,
+        List<FieldErrorResponse> fields
+    ) {
+        ApiErrorResponse response = new ApiErrorResponse(
+            LocalDateTime.now(),
+            status.value(),
+            status.getReasonPhrase(),
+            message,
+            path,
+            fields
+        );
+        return ResponseEntity.status(status).body(response);
     }
 }

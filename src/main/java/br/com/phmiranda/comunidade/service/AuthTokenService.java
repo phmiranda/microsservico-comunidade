@@ -1,14 +1,8 @@
-/**
- * User: Pedro
- * Project: comunidade
- * User History: nº 999
- * Description: N/A
- * Date: 28/07/2022
- */
-
 package br.com.phmiranda.comunidade.service;
 
 import br.com.phmiranda.comunidade.domain.entity.Usuario;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,13 +24,33 @@ public class AuthTokenService {
         Usuario usuario = (Usuario) authentication.getPrincipal();
         Date dataGeracaoToken = new Date();
         Date dataExpiracaoToken = new Date(dataGeracaoToken.getTime() + Long.parseLong(expiracao));
+
         return Jwts.builder()
-            .setIssuer("API da Comunidade da Alura")
+            .setIssuer("API da Comunidade")
             .setSubject(usuario.getId().toString())
             .setIssuedAt(dataGeracaoToken)
             .setExpiration(dataExpiracaoToken)
             .signWith(SignatureAlgorithm.HS256, secret)
             .compact();
+    }
 
+    public boolean isTokenValido(String token) {
+        try {
+            parseClaims(token);
+            return true;
+        } catch (JwtException | IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    public Long getUsuarioId(String token) {
+        return Long.valueOf(parseClaims(token).getSubject());
+    }
+
+    private Claims parseClaims(String token) {
+        return Jwts.parser()
+            .setSigningKey(secret)
+            .parseClaimsJws(token)
+            .getBody();
     }
 }

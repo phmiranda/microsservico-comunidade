@@ -1,28 +1,45 @@
-/*
- * Author: Pedro
- * Project: comunidade
- * User Story: 72
- * Description: Publicando Endpoints
- * Date: 20/07/2021
- */
-
 package br.com.phmiranda.comunidade.domain.entity;
 
 import br.com.phmiranda.comunidade.domain.enums.UsuarioStatus;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+import javax.persistence.FetchType;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.JoinTable;
+import javax.persistence.ManyToMany;
+import javax.persistence.Table;
+import javax.persistence.UniqueConstraint;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+@Getter
+@Setter
+@NoArgsConstructor
+@EqualsAndHashCode(of = "id")
 @Entity
-@Table(name = "usuarios")
+@Table(
+    name = "usuarios",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_usuarios_email", columnNames = "email"),
+        @UniqueConstraint(name = "uk_usuarios_documento", columnNames = "documento")
+    }
+)
 public class Usuario implements UserDetails {
 
     @Id
-    @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -40,15 +57,15 @@ public class Usuario implements UserDetails {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "situacao", nullable = false, length = 10)
-    private UsuarioStatus situacao = UsuarioStatus.INATIVO;
+    private UsuarioStatus situacao = UsuarioStatus.ATIVO;
 
     @ManyToMany(fetch = FetchType.EAGER)
-    @JoinColumn(name = "perfil_id", nullable = true)
+    @JoinTable(
+        name = "usuarios_perfis",
+        joinColumns = @JoinColumn(name = "usuario_id"),
+        inverseJoinColumns = @JoinColumn(name = "perfil_id")
+    )
     private List<Perfil> perfis = new ArrayList<>();
-
-    public Usuario() {
-
-    }
 
     public Usuario(String nome, String email, String documento, String senha) {
         this.nome = nome;
@@ -58,91 +75,18 @@ public class Usuario implements UserDetails {
     }
 
     @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((id == null) ? 0 : id.hashCode());
-        return result;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (getClass() != obj.getClass())
-            return false;
-        Usuario other = (Usuario) obj;
-        if (id == null) {
-            if (other.id != null)
-                return false;
-        } else if (!id.equals(other.id))
-            return false;
-        return true;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getNome() {
-        return nome;
-    }
-
-    public void setNome(String nome) {
-        this.nome = nome;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getDocumento() {
-        return documento;
-    }
-
-    public void setDocumento(String documento) {
-        this.documento = documento;
-    }
-
-    public String getSenha() {
-        return senha;
-    }
-
-    public void setSenha(String senha) {
-        this.senha = senha;
-    }
-
-    public UsuarioStatus getSituacao() {
-        return situacao;
-    }
-
-    public void setSituacao(UsuarioStatus situacao) {
-        this.situacao = situacao;
-    }
-
-    @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return this.perfis;
+        return perfis;
     }
 
     @Override
     public String getPassword() {
-        return this.senha;
+        return senha;
     }
 
     @Override
     public String getUsername() {
-        return this.email;
+        return email;
     }
 
     @Override
@@ -162,6 +106,6 @@ public class Usuario implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return true;
+        return UsuarioStatus.ATIVO.equals(situacao);
     }
 }

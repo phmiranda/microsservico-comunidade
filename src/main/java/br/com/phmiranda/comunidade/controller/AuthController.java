@@ -1,17 +1,12 @@
-/*
- * Author: phmiranda
- * Project: comunidade
- * Task Number: 71
- * Description: Introdução ao Spring Boot
- * Date: 26/03/2022
- */
-
 package br.com.phmiranda.comunidade.controller;
 
 import br.com.phmiranda.comunidade.domain.dto.request.AuthRequest;
-import br.com.phmiranda.comunidade.service.AuthService;
-import org.springframework.beans.factory.annotation.Autowired;
+import br.com.phmiranda.comunidade.domain.dto.response.AuthResponse;
+import br.com.phmiranda.comunidade.domain.entity.Usuario;
+import br.com.phmiranda.comunidade.service.AuthTokenService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,13 +18,26 @@ import javax.validation.Valid;
 @RequestMapping("/auth")
 public class AuthController {
 
-    @Autowired
-    AuthService authService;
+    private final AuthenticationManager authenticationManager;
+    private final AuthTokenService authTokenService;
+
+    public AuthController(AuthenticationManager authenticationManager, AuthTokenService authTokenService) {
+        this.authenticationManager = authenticationManager;
+        this.authTokenService = authTokenService;
+    }
 
     @PostMapping("/basica")
-    public ResponseEntity<?> autenticacaoBasica(@RequestBody @Valid AuthRequest authRequest) {
-        System.out.println(authRequest.getEmail());
-        System.out.println(authRequest.getSenha());
-        return authService.autenticar(authRequest);
+    public ResponseEntity<AuthResponse> autenticacaoBasica(@RequestBody @Valid AuthRequest authRequest) {
+        Authentication authentication = authenticationManager.authenticate(authRequest.converter());
+        Usuario usuario = (Usuario) authentication.getPrincipal();
+        String token = authTokenService.gerarToken(authentication);
+
+        return ResponseEntity.ok(new AuthResponse(
+            token,
+            "Bearer",
+            usuario.getId(),
+            usuario.getNome(),
+            usuario.getEmail()
+        ));
     }
 }

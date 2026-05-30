@@ -4,6 +4,6 @@ ARG BUILD_FILE=target/*.jar
 
 COPY ${BUILD_FILE} app.jar
 
-EXPOSE 8080
+EXPOSE 9000
 
 ENTRYPOINT ["java", "-jar", "/app.jar"]

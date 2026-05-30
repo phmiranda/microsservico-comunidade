@@ -1,0 +1,2 @@
+INSERT IGNORE INTO perfis(id, nome) VALUES(1, 'ROLE_ADMIN');
+INSERT IGNORE INTO perfis(id, nome) VALUES(2, 'ROLE_ALUNO');

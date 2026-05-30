@@ -1,69 +1,128 @@
-/*
- * Author: phmiranda
- * Project: comunidade
- * Task Number: HU-XXX
- * Description: N/A
- * Date: 07/04/2022
- */
-
 package br.com.phmiranda.comunidade.service;
 
-import br.com.phmiranda.comunidade.domain.dto.request.UsuarioUpdateRequest;
+import br.com.phmiranda.comunidade.config.exception.BusinessException;
+import br.com.phmiranda.comunidade.config.exception.ResourceNotFoundException;
 import br.com.phmiranda.comunidade.domain.dto.request.UsuarioRequest;
+import br.com.phmiranda.comunidade.domain.dto.request.UsuarioUpdateRequest;
 import br.com.phmiranda.comunidade.domain.dto.response.UsuarioResponse;
+import br.com.phmiranda.comunidade.domain.entity.Perfil;
 import br.com.phmiranda.comunidade.domain.entity.Usuario;
+import br.com.phmiranda.comunidade.repository.PerfilRepository;
 import br.com.phmiranda.comunidade.repository.UsuarioRepository;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.bcrypt.BCrypt;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.web.util.UriComponentsBuilder;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.net.URI;
+import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 @Service
 public class UsuarioService {
 
-    @Autowired
-    UsuarioRepository usuarioRepository;
+    private final UsuarioRepository usuarioRepository;
+    private final PerfilRepository perfilRepository;
+    private final PasswordEncoder passwordEncoder;
 
-    public Page<UsuarioResponse> index(Pageable paginacao) {
-        Page<Usuario> usuarios = usuarioRepository.findAll(paginacao);
-        return UsuarioResponse.converter(usuarios);
+    public UsuarioService(
+        UsuarioRepository usuarioRepository,
+        PerfilRepository perfilRepository,
+        PasswordEncoder passwordEncoder
+    ) {
+        this.usuarioRepository = usuarioRepository;
+        this.perfilRepository = perfilRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
-    public ResponseEntity<UsuarioResponse> salvar(UsuarioRequest usuarioRequest, UriComponentsBuilder uriComponentsBuilder) {
-        usuarioRequest.setSenha(new BCryptPasswordEncoder().encode(usuarioRequest.getSenha()));
-        Usuario usuario = usuarioRequest.converter();
+    @Transactional(readOnly = true)
+    public Page<UsuarioResponse> listar(Pageable paginacao) {
+        return UsuarioResponse.converter(usuarioRepository.findAll(paginacao));
+    }
+
+    @Transactional
+    public UsuarioResponse salvar(UsuarioRequest request) {
+        validarNovoUsuario(request.getEmail(), request.getDocumento());
+
+        Usuario usuario = new Usuario(
+            request.getNome(),
+            request.getEmail(),
+            request.getDocumento(),
+            passwordEncoder.encode(request.getSenha())
+        );
+        usuario.setPerfis(Collections.singletonList(buscarPerfilPadrao()));
+
         usuarioRepository.save(usuario);
-        URI uri = uriComponentsBuilder.path("/usuarios/{id}").buildAndExpand(usuario.getId()).toUri();
-        return ResponseEntity.created(uri).body(new UsuarioResponse(usuario));
+        return new UsuarioResponse(usuario);
     }
 
-    public ResponseEntity<UsuarioResponse> atualizar(Long id, UsuarioUpdateRequest usuarioUpdateRequest) {
-        Usuario usuario = usuarioUpdateRequest.atualizarEntidade(id, usuarioRepository);
-        return ResponseEntity.ok(new UsuarioResponse(usuario));
-    }
+    @Transactional
+    public UsuarioResponse atualizar(Long id, UsuarioUpdateRequest request) {
+        Usuario usuario = buscarEntidade(id);
+        validarUsuarioExistente(id, request.getEmail(), request.getDocumento());
 
-    public ResponseEntity<UsuarioResponse> pesquisarPorId(Long id) {
-        Optional<Usuario> optional = usuarioRepository.findById(id);
-        if(optional.isPresent()) {
-            return ResponseEntity.ok(new UsuarioResponse(optional.get()));
+        usuario.setNome(request.getNome());
+        usuario.setEmail(request.getEmail());
+        usuario.setDocumento(request.getDocumento());
+        usuario.setSituacao(request.getUsuarioStatus());
+        usuario.setPerfis(buscarPerfis(request.getPerfilIds()));
+
+        if (request.getSenha() != null && !request.getSenha().trim().isEmpty()) {
+            usuario.setSenha(passwordEncoder.encode(request.getSenha()));
         }
-        return ResponseEntity.notFound().build();
+
+        return new UsuarioResponse(usuario);
     }
 
-    public ResponseEntity<?> deletar(Long id) {
-        Optional<Usuario> optional = usuarioRepository.findById(id);
-        if (optional.isPresent()){
-            usuarioRepository.deleteById(id);
-            return ResponseEntity.ok().build();
+    @Transactional(readOnly = true)
+    public UsuarioResponse pesquisarPorId(Long id) {
+        return new UsuarioResponse(buscarEntidade(id));
+    }
+
+    @Transactional
+    public void deletar(Long id) {
+        Usuario usuario = buscarEntidade(id);
+        usuarioRepository.delete(usuario);
+    }
+
+    @Transactional(readOnly = true)
+    public Usuario buscarEntidade(Long id) {
+        return usuarioRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Usuário", id));
+    }
+
+    private void validarNovoUsuario(String email, String documento) {
+        if (usuarioRepository.existsByEmail(email)) {
+            throw new BusinessException("Já existe um usuário cadastrado com este e-mail.");
         }
-        return ResponseEntity.notFound().build();
+        if (usuarioRepository.existsByDocumento(documento)) {
+            throw new BusinessException("Já existe um usuário cadastrado com este documento.");
+        }
+    }
+
+    private void validarUsuarioExistente(Long id, String email, String documento) {
+        if (usuarioRepository.existsByEmailAndIdNot(email, id)) {
+            throw new BusinessException("Já existe outro usuário cadastrado com este e-mail.");
+        }
+        if (usuarioRepository.existsByDocumentoAndIdNot(documento, id)) {
+            throw new BusinessException("Já existe outro usuário cadastrado com este documento.");
+        }
+    }
+
+    private List<Perfil> buscarPerfis(List<Long> perfilIds) {
+        if (perfilIds == null || perfilIds.isEmpty()) {
+            return Collections.singletonList(buscarPerfilPadrao());
+        }
+
+        List<Perfil> perfis = perfilRepository.findAllById(perfilIds);
+        if (perfis.size() != perfilIds.stream().distinct().count()) {
+            throw new ResourceNotFoundException("Um ou mais perfis informados não foram encontrados.");
+        }
+        return perfis;
+    }
+
+    private Perfil buscarPerfilPadrao() {
+        return perfilRepository.findByNome(PerfilService.PERFIL_PADRAO)
+            .orElseThrow(() -> new ResourceNotFoundException("Perfil padrão não encontrado."));
     }
 }

@@ -1,26 +1,36 @@
-/*
- * Author: Pedro
- * Project: comunidade
- * User Story: 72
- * Description: Publicando Endpoints
- * Date: 20/07/2021
- */
-
 package br.com.phmiranda.comunidade.domain.entity;
 
 import br.com.phmiranda.comunidade.domain.enums.DuvidaStatus;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
-import javax.persistence.*;
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
+import javax.persistence.OneToMany;
+import javax.persistence.PrePersist;
+import javax.persistence.Table;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+@Getter
+@Setter
+@NoArgsConstructor
+@EqualsAndHashCode(of = "id")
 @Entity
 @Table(name = "duvidas")
 public class Duvida {
 
     @Id
-    @Column(name = "id", nullable = false)
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
@@ -30,16 +40,15 @@ public class Duvida {
     @Column(name = "descricao", nullable = false, columnDefinition = "TEXT")
     private String descricao;
 
-    @ManyToOne
-    @JoinColumn(name = "curso_id", nullable = true)
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "curso_id", nullable = false)
     private Curso curso;
 
-    @ManyToOne
-    @JoinColumn(name = "usuario_id", nullable = true)
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "usuario_id", nullable = false)
     private Usuario usuario;
 
     @OneToMany(mappedBy = "duvida")
-    @Column(name = "resposta_id", nullable = true)
     private List<Resposta> respostas = new ArrayList<>();
 
     @Enumerated(EnumType.STRING)
@@ -47,104 +56,19 @@ public class Duvida {
     private DuvidaStatus duvidaStatus = DuvidaStatus.NAO_RESPONDIDO;
 
     @Column(name = "data_criacao", nullable = false)
-    private LocalDateTime dataCriacao = LocalDateTime.now();
+    private LocalDateTime dataCriacao;
 
-    @Override
-    public int hashCode() {
-        final int prime = 31;
-        int result = 1;
-        result = prime * result + ((id == null) ? 0 : id.hashCode());
-        return result;
-    }
-
-    public Duvida() {
-
-    }
-
-    public Duvida(String titulo, String descricao, Curso curso) {
+    public Duvida(String titulo, String descricao, Curso curso, Usuario usuario) {
         this.titulo = titulo;
         this.descricao = descricao;
         this.curso = curso;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        if (getClass() != obj.getClass())
-            return false;
-        Duvida other = (Duvida) obj;
-        if (id == null) {
-            if (other.id != null)
-                return false;
-        } else if (!id.equals(other.id))
-            return false;
-        return true;
-    }
-
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getTitulo() {
-        return titulo;
-    }
-
-    public void setTitulo(String titulo) {
-        this.titulo = titulo;
-    }
-
-    public String getDescricao() {
-        return descricao;
-    }
-
-    public void setDescricao(String descricao) {
-        this.descricao = descricao;
-    }
-
-    public Curso getCurso() {
-        return curso;
-    }
-
-    public void setCurso(Curso curso) {
-        this.curso = curso;
-    }
-
-    public Usuario getUsuario() {
-        return usuario;
-    }
-
-    public void setUsuario(Usuario usuario) {
         this.usuario = usuario;
     }
 
-    public List<Resposta> getRespostas() {
-        return respostas;
-    }
-
-    public void setRespostas(List<Resposta> respostas) {
-        this.respostas = respostas;
-    }
-
-    public DuvidaStatus getDuvidaStatus() {
-        return duvidaStatus;
-    }
-
-    public void setDuvidaStatus(DuvidaStatus duvidaStatus) {
-        this.duvidaStatus = duvidaStatus;
-    }
-
-    public LocalDateTime getDataCriacao() {
-        return dataCriacao;
-    }
-
-    public void setDataCriacao(LocalDateTime dataCriacao) {
-        this.dataCriacao = dataCriacao;
+    @PrePersist
+    public void prePersist() {
+        if (dataCriacao == null) {
+            dataCriacao = LocalDateTime.now();
+        }
     }
 }
